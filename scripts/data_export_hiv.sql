@@ -5,9 +5,7 @@
 --      if the param2 is null, it will output to caller
 -- --------------------------------------------------------------------------------
 DELIMITER $$
-
-DROP PROCEDURE IF EXISTS `openmrs`.`data_export_hiv`$$
-CREATE PROCEDURE `openmrs`.`data_export_hiv`(
+CREATE DEFINER=`root`@`localhost` PROCEDURE `data_export_hiv`(
 _site char(2)
 ,_export_dir varchar(30)
 
@@ -162,7 +160,7 @@ select dgpl.patient_id, dgpl.identifier, dgpl.pi_loc_id
 , dgpl.state, cast(dgpl.start_date as date) as state_startdate, cast(dgpl.end_date as date) as state_enddate
 , dgpl.loc
 , p.gender, p.birthdate, cast(p.death_date as date) as deathdate, p.dead
-, pea.city_village, pea.neighborhood_cell, pea.county_district, COALESCE(pea.country, 0) as country, pea.latitude, pea.longitude
+, pea.city_village, pea.address3, pea.county_district, COALESCE(pea.country, 0) as country, pea.latitude, pea.longitude
 , pn.given_name, pn.family_name
 , dgpf.date_enrolled
 , dgpf.date_completed
@@ -187,7 +185,7 @@ as
 select obs.person_id, obs.encounter_id, cast(obs.obs_datetime as date) as obs_date, cast(obs.value_datetime as date) as value_date, obs.value_numeric, obs.value_text, obs.concept_id, obs.value_coded
 from obs
 left join de_main as dm on obs.person_id=dm.patient_id
-where obs.concept_id IN (1480, 2676, 2876, 5096, 5497, 5089, 5090) and obs.voided=0
+where obs.concept_id IN (1480, 2676, 2876, 5096, 5497, 5089, 5090, 856, 6998) and obs.voided=0
 and dm.patient_id is not null;
 
 ALTER TABLE `de_obs` ADD INDEX ( person_id );
@@ -226,6 +224,32 @@ where concept_id=6974
 group by person_id;
 
 ALTER TABLE `de_refill2` ADD INDEX ( person_id );
+
+#vl_latest
+DROP TABLE IF EXISTS `de_vl_latest`;
+create temporary table `de_vl_latest`
+as
+select * from (
+select person_id, obs_date as vl_latestdate, value_numeric as vl_latest
+from de_obs
+where concept_id=856
+order by obs_date DESC) as a
+group by person_id;
+
+ALTER TABLE `de_vl_latest` ADD INDEX ( person_id );
+
+#vlu_latest
+DROP TABLE IF EXISTS `de_vlu_latest`;
+create temporary table `de_vlu_latest`
+as
+select * from (
+select person_id, obs_date as vlu_latestdate, value_numeric as vlu_latest
+from de_obs
+where concept_id=6998
+order by obs_date DESC) as a
+group by person_id;
+
+ALTER TABLE `de_vlu_latest` ADD INDEX ( person_id );
 
 #cd4_latest
 DROP TABLE IF EXISTS `de_cd4_latest`;
@@ -361,7 +385,7 @@ select dm.patient_id
 ,dm.given_name as pat_gname
 ,dm.family_name as pat_surname
 ,dm.county_district as district
-,dm.neighborhood_cell as council
+,dm.address3 as council
 ,dm.city_village as village
 ,dm.country as addr_hier_match
 ,dm.latitude as latitude
@@ -388,6 +412,10 @@ select dm.patient_id
 ,dv.next_return_visit
 ,dr1.next_refill as next_refill1
 ,dr2.next_refill as next_refill2
+,vll.vl_latest
+,vll.vl_latestdate
+,vlul.vlu_latest
+,vlul.vlu_latestdate
 ,dcf.cd4_firstdate
 ,dcf.cd4_first
 ,dcl.cd4_latestdate
@@ -409,6 +437,8 @@ from de_main as dm
 left join de_rvisit as dv on dm.patient_id=dv.person_id
 left join de_refill1 as dr1 on dm.patient_id=dr1.person_id
 left join de_refill2 as dr2 on dm.patient_id=dr2.person_id
+left join de_vl_latest as vll on dm.patient_id=vll.person_id
+left join de_vlu_latest as vlul on dm.patient_id=vlul.person_id
 left join de_cd4_first as dcf on dm.patient_id=dcf.person_id
 left join de_cd4_latest as dcl on dm.patient_id=dcl.person_id
 left join de_arv_first as daf on dm.patient_id=daf.person_id
@@ -416,7 +446,8 @@ left join de_arv_latest as dal on dm.patient_id=dal.person_id
 left join de_whos_firstmax as dwm on dm.patient_id=dwm.person_id
 left join de_whos_firstchg as dwc on dm.patient_id=dwc.person_id
 left join encounter as dwe on dwc.encounter_id=dwe.encounter_id
-left join person_name as dwp on dwe.provider_id=dwp.person_id
+left join encounter_provider as ep on dwe.encounter_id=ep.encounter_id
+left join person_name as dwp on ep.provider_id=dwp.person_id
 left join de_weight as dw on dm.patient_id=dw.person_id
 left join de_height as dh on dm.patient_id=dh.person_id
 left join relationship as r on dm.patient_id=r.person_b and r.relationship=1
@@ -424,7 +455,7 @@ left join person_name as rpn on rpn.person_id=r.person_a
 left join patient_identifier as pi on dm.patient_id=pi.patient_id and pi.identifier_type=2 and pi.voided=0
 left join de_states as des on dm.state=des.id
 left join encounter as enc on dm.patient_id=enc.patient_id and enc.encounter_type in (1,2) and enc.encounter_datetime=dm.enc_latestdate
-left join person_name as pn on enc.provider_id=pn.person_id
+left join person_name as pn on ep.provider_id=pn.person_id
 group by dm.patient_id
 ;
 
@@ -469,6 +500,7 @@ IF _export_dir IS NOT NULL THEN
   , 'enrolldate', 'completedate'
   , 'state', 'state_dayspassed', 'state_startdate', 'state_enddate', 'state_active'
   , 'next_return_visit', 'next_refill1', 'next_refill2'
+  , 'vl_latest', 'vl_latestdate', 'vlu_latest', 'vlu_latestdate'
   , 'cd4_firstdate', 'cd4_first', 'cd4_latestdate', 'cd4_latest'
   , 'arv_firstdate', 'arv_first', 'arv_latestdate', 'arv_latest'
   , 'whos_firstmax', 'whos_firstmaxdate', 'whos_invalid', 'whos_invaliddate', 'whos_invalidprovider'
@@ -506,6 +538,10 @@ IF _export_dir IS NOT NULL THEN
   , coalesce(next_return_visit, '')
   , coalesce(next_refill1, '')
   , coalesce(next_refill2, '')
+  , coalesce(vl_latest, '')
+  , coalesce(vl_latestdate, '')
+  , coalesce(vlu_latest, '')
+  , coalesce(vlu_latestdate, '')
   , coalesce(cd4_firstdate, '')
   , coalesce(cd4_first, '')
   , coalesce(cd4_latestdate, '')
@@ -538,5 +574,4 @@ IF _export_dir IS NOT NULL THEN
 END IF;
 
 END$$
-
 DELIMITER ;
