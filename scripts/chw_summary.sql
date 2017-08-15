@@ -3,7 +3,9 @@ DROP PROCEDURE IF EXISTS `chw_summary`$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `chw_summary`()
 BEGIN
-
+select 'Provider_id', 'person_id', 'Provider_role', 'Provider_name', 'Patient_count'
+, 'Supervisor_Name', 'Supervisor_id', 'relationship_id', 'Coordinator_Name', 'Coordinator_id'
+UNION ALL 
 select distinct p.identifier "Provider_id", p.person_id,  pr.name "Provider_role", CONCAT(pn.given_name, ' ',pn.family_name) "Provider_name", 
 COALESCE(c.patients,0) "Patient_count", 
 CONCAT(pn_sup.given_name, ' ',pn_sup.family_name) "Supervisor_Name" , p_sup.identifier "Supervisor_id", r_sup.relationship_id,

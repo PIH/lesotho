@@ -2,6 +2,10 @@ DELIMITER $$
 DROP PROCEDURE IF EXISTS `chw_patient`$$
 CREATE DEFINER=`root`@`localhost` PROCEDURE `chw_patient`()
 BEGIN
+
+select 'provider_identifier', 'Provider_role', 'Provider_Name', 'Patient_Name', 'Patient_identifier'
+, 'Current_HIV_State', 'CHW_present_last_pickup'
+UNION ALL
 select 
 p.identifier "provider_identifier",pr.name "Provider_role", CONCAT(pn.given_name, ' ',pn.family_name) "Provider_Name", 
 CONCAT(pnc.given_name, ' ',pnc.family_name) "Patient_Name",pid.identifier "Patient_identifier",
