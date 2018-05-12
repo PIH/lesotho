@@ -5,9 +5,7 @@
 --      if the param2 is null, it will output to caller
 -- --------------------------------------------------------------------------------
 DELIMITER $$
-
-DROP PROCEDURE IF EXISTS `openmrs`.`data_export_hiv`$$
-CREATE PROCEDURE `openmrs`.`data_export_hiv`(
+CREATE DEFINER=`root`@`localhost` PROCEDURE `data_export_hiv`(
 _site char(2)
 ,_export_dir varchar(30)
 
@@ -1151,5 +1149,4 @@ IF _export_dir IS NOT NULL THEN
 END IF;
 
 END$$
-
 DELIMITER ;
